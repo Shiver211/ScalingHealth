@@ -47,7 +47,6 @@ public final class WealthDropTable {
             ScalingHealth.LOGGER.warn("Could not create Scaling Health config directory: {}", scalingHealthDirectory);
         }
         file = new File(scalingHealthDirectory, FILE_NAME);
-        reload();
     }
 
     public Stats reload() {
