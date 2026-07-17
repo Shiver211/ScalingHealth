@@ -25,6 +25,7 @@ import com.smd.scalinghealth.capability.player.PlayerStateAccess;
 import com.smd.scalinghealth.config.Config;
 import com.smd.scalinghealth.init.ModItems;
 import com.smd.scalinghealth.service.PlayerStateService;
+import com.smd.scalinghealth.service.SyncService;
 
 import javax.annotation.Nullable;
 import java.util.Random;
@@ -140,6 +141,8 @@ public class ScalingHealthCommonEvents {
                         currentDifficulty - Config.Difficulty.lostOnDeath,
                         Config.Difficulty.minValue, Config.Difficulty.maxValue);
                 PlayerStateService.setDifficulty(player, state, newDifficulty);
+            } else {
+                SyncService.syncPlayer(player, state);
             }
 
             PlayerStateService.applyDerivedHealth(player, state);

@@ -9,6 +9,7 @@ import net.minecraftforge.event.entity.player.PlayerEvent.StartTracking;
 import net.minecraftforge.event.entity.player.PlayerEvent.Clone;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent.PlayerLoggedInEvent;
+import net.minecraftforge.fml.common.gameevent.PlayerEvent.PlayerChangedDimensionEvent;
 import com.smd.scalinghealth.service.PlayerStateService;
 import com.smd.scalinghealth.service.SyncService;
 
@@ -38,6 +39,16 @@ public class PlayerStateEventHandler {
             if (state != null) {
                 migrateLegacyDifficulty(event.player, state);
                 PlayerStateService.applyDerivedHealth(event.player, state);
+                SyncService.syncPlayer(event.player, state);
+            }
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerChangedDimension(PlayerChangedDimensionEvent event) {
+        if (event.player instanceof EntityPlayerMP) {
+            IPlayerState state = PlayerStateAccess.get(event.player);
+            if (state != null) {
                 SyncService.syncPlayer(event.player, state);
             }
         }

@@ -372,7 +372,7 @@ public class Config {
         Difficulty.searchRadius = integer(CAT_DIFFICULTY, "Search Radius", 48, 0, Short.MAX_VALUE,
                 "怪物生成时搜索玩家的半径。0 表示无限范围。");
         Difficulty.startValue = floating(CAT_DIFFICULTY, "Starting Value", 0f, 0f, Float.MAX_VALUE,
-                "新玩家或新世界的初始难度。");
+                "新玩家或新世界的初始难度(WIP)");
         Difficulty.statsConsumeDifficulty = bool(CAT_DIFFICULTY, "Stats Consume Difficulty", false,
                 "怪物生成属性和药水效果时是否消耗生成难度，开启后更接近旧版本行为。");
         Difficulty.AREA_DIFFICULTY_MODE = loadEnum("Area Mode", CAT_DIFFICULTY, EnumAreaDifficultyMode.class,
