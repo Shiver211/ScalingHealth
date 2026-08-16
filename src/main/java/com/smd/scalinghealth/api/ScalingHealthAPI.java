@@ -18,6 +18,7 @@ public final class ScalingHealthAPI {
 
     public static void spawnWithoutDifficulty(World world, EntityLivingBase entity) {
         entity.getEntityData().setInteger(DifficultyHandler.NBT_ENTITY_DIFFICULTY, -1);
+        entity.getEntityData().setBoolean(DifficultyHandler.NBT_ENTITY_PROCESSED, true);
         world.spawnEntity(entity);
     }
 

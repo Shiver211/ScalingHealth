@@ -10,6 +10,7 @@ import net.minecraftforge.fml.common.SidedProxy;
 import net.minecraftforge.fml.common.event.*;
 import com.smd.scalinghealth.command.CommandRecalculate;
 import com.smd.scalinghealth.command.CommandScalingHealth;
+import com.smd.scalinghealth.event.DifficultyHandler;
 import com.smd.scalinghealth.init.ModItems;
 import com.smd.scalinghealth.proxy.ScalingHealthCommonProxy;
 import org.apache.logging.log4j.LogManager;
@@ -69,6 +70,11 @@ public class ScalingHealth {
         if (server != null) {
             server.worlds[0].getGameRules().setOrCreateGameRule(GAME_RULE_DIFFICULTY, "true");
         }
+    }
+
+    @EventHandler
+    public void onServerStopped(FMLServerStoppedEvent event) {
+        DifficultyHandler.INSTANCE.clearPendingEntities();
     }
 
 }

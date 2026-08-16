@@ -20,6 +20,8 @@ import net.minecraft.util.math.MathHelper;
 import net.minecraft.world.World;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.world.WorldEvent;
+import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import com.smd.scalinghealth.ScalingHealth;
@@ -30,7 +32,9 @@ import com.smd.scalinghealth.service.PlayerStateService;
 import com.smd.scalinghealth.utils.EntityDifficultyChangeList.DifficultyChanges;
 import com.smd.scalinghealth.utils.*;
 
-import java.util.ArrayList;
+import java.lang.ref.WeakReference;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -40,10 +44,12 @@ import java.util.UUID;
 
 public class DifficultyHandler {
     public static final String NBT_ENTITY_DIFFICULTY = Tags.MOD_ID + ":difficulty";
+    public static final String NBT_ENTITY_PROCESSED = Tags.MOD_ID + ":difficulty_processed";
     public static DifficultyHandler INSTANCE = new DifficultyHandler();
 
     private static final int MAX_PENDING_PROCESS_PER_TICK = 64;
     private static final int MAX_PENDING_PROCESS_ATTEMPTS = 40;
+    private static final int MAX_PENDING_ENTITIES = 4096;
     private static int POTION_APPLY_TIME = 10 * 1200;
     private static final String[] POTION_DEFAULTS = {
             "minecraft:strength,30,1",
@@ -58,7 +64,7 @@ public class DifficultyHandler {
     private int serverTicks;
 
     public MobPotionMap potionMap = new MobPotionMap();
-    private final List<PendingEntity> pendingEntities = new ArrayList<>();
+    private final Deque<PendingEntity> pendingEntities = new ArrayDeque<>();
     private final Set<UUID> pendingEntityIds = new HashSet<>();
 
     public void initPotionMap() {
@@ -111,7 +117,7 @@ public class DifficultyHandler {
         }
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public void onEntityJoinWorld(EntityJoinWorldEvent event) {
         if (!event.getWorld().isRemote && event.getEntity() instanceof EntityLivingBase) {
             queueForProcessing((EntityLivingBase) event.getEntity());
@@ -140,6 +146,7 @@ public class DifficultyHandler {
         }
 
         increaseEntityHealth(entity);
+        markProcessed(entity);
         return true;
     }
 
@@ -147,11 +154,13 @@ public class DifficultyHandler {
         SHUtils.removeModifier(entity, SharedMonsterAttributes.ATTACK_DAMAGE, ModifierHandler.MODIFIER_ID_DAMAGE);
         SHUtils.removeModifier(entity, SharedMonsterAttributes.MAX_HEALTH, ModifierHandler.MODIFIER_ID_HEALTH);
         entity.getEntityData().setInteger(NBT_ENTITY_DIFFICULTY, 0);
+        entity.getEntityData().setBoolean(NBT_ENTITY_PROCESSED, false);
         return process(entity);
     }
 
     private static boolean isProcessed(EntityLivingBase entity) {
-        return entity.getEntityData().getInteger(NBT_ENTITY_DIFFICULTY) != 0;
+        return entity.getEntityData().getBoolean(NBT_ENTITY_PROCESSED)
+                || entity.getEntityData().getInteger(NBT_ENTITY_DIFFICULTY) != 0;
     }
 
     @SubscribeEvent
@@ -198,49 +207,75 @@ public class DifficultyHandler {
         }
 
         UUID id = entity.getPersistentID();
-        if (pendingEntityIds.add(id)) {
+        if (!pendingEntityIds.contains(id) && pendingEntities.size() < MAX_PENDING_ENTITIES) {
+            pendingEntityIds.add(id);
             pendingEntities.add(new PendingEntity(entity, id));
         }
     }
 
     private void processPendingEntities() {
-        Iterator<PendingEntity> iterator = pendingEntities.iterator();
         int scannedThisTick = 0;
-        int processedThisTick = 0;
-        while (iterator.hasNext()) {
-            if (++scannedThisTick > MAX_PENDING_PROCESS_PER_TICK) {
-                break;
-            }
-
-            PendingEntity pending = iterator.next();
-            EntityLivingBase entity = pending.entity;
-            if (entity == null || entity.isDead || entity.world == null || entity.world.isRemote || isProcessed(entity)) {
+        while (!pendingEntities.isEmpty() && scannedThisTick++ < MAX_PENDING_PROCESS_PER_TICK) {
+            PendingEntity pending = pendingEntities.removeFirst();
+            EntityLivingBase entity = pending.entity.get();
+            if (!isPendingEntityValid(entity)) {
                 pendingEntityIds.remove(pending.id);
-                iterator.remove();
                 continue;
             }
 
             if (process(entity)) {
                 ++debugMobsProcessed;
-                ++processedThisTick;
                 pendingEntityIds.remove(pending.id);
-                iterator.remove();
-                if (processedThisTick >= MAX_PENDING_PROCESS_PER_TICK) {
-                    break;
-                }
                 continue;
             }
 
             if (++pending.attempts >= MAX_PENDING_PROCESS_ATTEMPTS) {
                 markProcessedWithoutDifficulty(entity);
                 pendingEntityIds.remove(pending.id);
+            } else {
+                pendingEntities.addLast(pending);
+            }
+        }
+    }
+
+    private static boolean isPendingEntityValid(EntityLivingBase entity) {
+        return entity != null
+                && !entity.isDead
+                && entity.world != null
+                && !entity.world.isRemote
+                && entity.world.getEntityByID(entity.getEntityId()) == entity
+                && !isProcessed(entity);
+    }
+
+    @SubscribeEvent
+    public void onWorldUnload(WorldEvent.Unload event) {
+        if (event.getWorld().isRemote) {
+            return;
+        }
+
+        Iterator<PendingEntity> iterator = pendingEntities.iterator();
+        while (iterator.hasNext()) {
+            PendingEntity pending = iterator.next();
+            EntityLivingBase entity = pending.entity.get();
+            if (entity == null || entity.world == event.getWorld()) {
+                pendingEntityIds.remove(pending.id);
                 iterator.remove();
             }
         }
     }
 
+    public void clearPendingEntities() {
+        pendingEntities.clear();
+        pendingEntityIds.clear();
+    }
+
     private static void markProcessedWithoutDifficulty(EntityLivingBase entity) {
         entity.getEntityData().setInteger(NBT_ENTITY_DIFFICULTY, -1);
+        markProcessed(entity);
+    }
+
+    private static void markProcessed(EntityLivingBase entity) {
+        entity.getEntityData().setBoolean(NBT_ENTITY_PROCESSED, true);
     }
 
     private void increaseEntityHealth(EntityLivingBase entityLiving) {
@@ -370,12 +405,12 @@ public class DifficultyHandler {
     }
 
     private static final class PendingEntity {
-        private final EntityLivingBase entity;
+        private final WeakReference<EntityLivingBase> entity;
         private final UUID id;
         private int attempts;
 
         private PendingEntity(EntityLivingBase entity, UUID id) {
-            this.entity = entity;
+            this.entity = new WeakReference<>(entity);
             this.id = id;
         }
     }
