@@ -17,6 +17,7 @@ import net.minecraft.util.DamageSource;
 import net.minecraft.util.ResourceLocation;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.GameRules;
 import net.minecraft.world.World;
 import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
@@ -130,7 +131,7 @@ public class DifficultyHandler {
         }
 
         boolean difficultyEnabled = Config.Difficulty.maxValue > 0
-                && entity.world.getGameRules().getBoolean(ScalingHealth.GAME_RULE_DIFFICULTY);
+                && ScalingHealth.isDifficultyRuleEnabled(entity.world);
         if (!difficultyEnabled) {
             markProcessedWithoutDifficulty(entity);
             return true;
@@ -245,6 +246,15 @@ public class DifficultyHandler {
                 && !entity.world.isRemote
                 && entity.world.getEntityByID(entity.getEntityId()) == entity
                 && !isProcessed(entity);
+    }
+
+    @SubscribeEvent
+    public void onWorldLoad(WorldEvent.Load event) {
+        if (!event.getWorld().isRemote) {
+            if (!event.getWorld().getGameRules().hasRule(ScalingHealth.GAME_RULE_DIFFICULTY)) {
+                event.getWorld().getGameRules().addGameRule(ScalingHealth.GAME_RULE_DIFFICULTY, "true", GameRules.ValueType.BOOLEAN_VALUE);
+            }
+        }
     }
 
     @SubscribeEvent

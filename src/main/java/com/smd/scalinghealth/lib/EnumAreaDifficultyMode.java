@@ -25,7 +25,7 @@ public enum EnumAreaDifficultyMode {
     }
 
     public double getAreaDifficulty(World world, BlockPos pos, boolean addGroupBonus, boolean clampValue) {
-        if (!world.isRemote && !world.getGameRules().getBoolean(ScalingHealth.GAME_RULE_DIFFICULTY)) {
+        if (!ScalingHealth.isDifficultyRuleEnabled(world)) {
             // Difficulty is disabled via game rule.
             return 0.0;
         }
@@ -43,6 +43,9 @@ public enum EnumAreaDifficultyMode {
             case SINGLE_PLAYER:
                 EntityPlayer closestPlayer = world.getClosestPlayer(pos.getX(), pos.getY(), pos.getZ(),
                         unlimitedRadius ? -1 : radius, false);
+                if (closestPlayer == null) {
+                    closestPlayer = world.getClosestPlayer(pos.getX(), pos.getY(), pos.getZ(), -1, false);
+                }
                 if (closestPlayer != null) {
                     IPlayerState state = PlayerStateAccess.get(closestPlayer);
                     if (state != null) {
@@ -55,6 +58,13 @@ public enum EnumAreaDifficultyMode {
                 List<EntityPlayer> players = world.getPlayers(EntityPlayer.class,
                         p -> p.getDistanceSq(pos) <= radiusSquared);
                 if (players.isEmpty()) {
+                    EntityPlayer fallbackPlayer = world.getClosestPlayer(pos.getX(), pos.getY(), pos.getZ(), -1, false);
+                    if (fallbackPlayer != null) {
+                        IPlayerState state = PlayerStateAccess.get(fallbackPlayer);
+                        if (state != null) {
+                            ret = PlayerStateService.getDifficulty(state);
+                        }
+                    }
                     break;
                 }
                 playerCountForGroupBonus = players.size();
@@ -62,8 +72,8 @@ public enum EnumAreaDifficultyMode {
                 for (EntityPlayer player : players) {
                     IPlayerState state = PlayerStateAccess.get(player);
                     if (state != null) {
-                        int distance = (int) pos.getDistance((int) player.posX, pos.getY(), (int) player.posZ);
-                        int weight = (radius - distance) / 16 + 1;
+                        double distance = Math.sqrt(player.getDistanceSq(pos));
+                        int weight = Math.max(1, (int) ((radius - distance) / 16.0) + 1);
 
                         total += weight * PlayerStateService.getDifficulty(state);
                         totalWeight += weight;

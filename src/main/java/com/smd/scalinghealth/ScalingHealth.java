@@ -16,6 +16,10 @@ import com.smd.scalinghealth.proxy.ScalingHealthCommonProxy;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import net.minecraft.world.GameRules;
+import net.minecraft.world.World;
+import net.minecraft.world.WorldServer;
+
 import java.util.Random;
 
 @Mod(modid = Tags.MOD_ID,
@@ -43,6 +47,16 @@ public class ScalingHealth {
 
     public static ScalingHealthCommonProxy proxy;
 
+    public static boolean isDifficultyRuleEnabled(World world) {
+        if (world == null || world.isRemote) {
+            return true;
+        }
+        if (!world.getGameRules().hasRule(GAME_RULE_DIFFICULTY)) {
+            return true;
+        }
+        return world.getGameRules().getBoolean(GAME_RULE_DIFFICULTY);
+    }
+
     @EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         proxy.preInit(event);
@@ -67,8 +81,12 @@ public class ScalingHealth {
     @EventHandler
     public void onServerStarted(FMLServerStartedEvent event) {
         MinecraftServer server = FMLCommonHandler.instance().getMinecraftServerInstance();
-        if (server != null) {
-            server.worlds[0].getGameRules().setOrCreateGameRule(GAME_RULE_DIFFICULTY, "true");
+        if (server != null && server.worlds != null) {
+            for (WorldServer world : server.worlds) {
+                if (world != null && !world.getGameRules().hasRule(GAME_RULE_DIFFICULTY)) {
+                    world.getGameRules().addGameRule(GAME_RULE_DIFFICULTY, "true", GameRules.ValueType.BOOLEAN_VALUE);
+                }
+            }
         }
     }
 

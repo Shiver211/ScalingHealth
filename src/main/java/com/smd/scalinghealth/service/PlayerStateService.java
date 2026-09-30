@@ -30,7 +30,7 @@ public final class PlayerStateService {
     }
 
     public static void incrementDifficulty(EntityPlayer player, IPlayerState state, double amount) {
-        if (!player.world.getGameRules().getBoolean(ScalingHealth.GAME_RULE_DIFFICULTY)) {
+        if (!ScalingHealth.isDifficultyRuleEnabled(player.world)) {
             return;
         }
 
